@@ -1,0 +1,111 @@
+Methods 0:
+vl = 10, sn = 200
+75 play 31 lose
+win rate 40%
+
+vl = 10, sn = 100
+win rate 34.5%
+time= 34.3s total step = 35.0 average =   1.0
+
+vl = 8, sn = 100
+win rate 27%
+time= 34.4s total step = 31.0 average =   1.1
+
+vl = 6, sn = 100
+win rate 40.5%
+time= 31.1s total step = 27.0 average =   1.2
+
+vl = 4, sn = 100
+win rate 49%
+time= 34.9s total step = 34.0 average =   1.0
+
+vl = 2, sn = 100
+time: 2704.3
+w_r 50%
+time= 26.3s total step = 26.0 average =   1.0
+
+vl = 1, sn = 100
+time:2500.6
+w_r: 55.5%
+time= 37.5s total step = 37.0 average =   1.0
+
+vl = 0.1, sn =200
+time = 3699
+w_r: 76.5%
+time= 60.4s total step = 29.0 average =   2.1
+
+vl = 0.1. sn = 100
+This use vl for all simulation steps
+time = 2613
+w_r: 65%
+time= 33.4s total step = 28.0 average =   1.2
+
+
+
+
+
+new methods 1:
+vl = 1
+w_r = 30.5%
+2264.6s
+time= 34.6s total step = 31.0 average =   1.1
+
+vl = 0.5
+w_r = 44.5%
+2716s
+time= 20.7s total step = 19.0 average =   1.1
+
+vl = 0.2
+winning rate 70.5%
+time= 25.7s total step = 23.0 average =   1.1
+
+vl = 0.1
+w_r: 78.5%
+time = 1.1
+
+vl = 0.05
+time = 1.2?
+w_r: 81%
+
+vl = 0.01
+time = 1.5 ~ 1.7
+85%
+
+vl = 0
+w_r = ~87%
+time= 38.9s total step = 23.0 average =   1.9
+
+
+
+
+
+
+
+new methods 2:
+Use update = vl / (n*n+1) [maybe use (n+1)? Coud save time]
+vl = 1
+71%
+time = 2544.9
+time= 35.7s total step = 35.0 average =   1.0
+
+vl = 0.6
+winning rate 77.0%
+average = 1.2
+
+vl = 0.4
+
+
+vl = 0.3
+winning rate 81.0%
+time= 29.2s total step = 26.0 average =   1.1
+
+vl = 0.2
+winning rate = 85%
+second time 80.5??
+average = ~1.2
+
+vl = 0.1
+w_r: 87%
+average = 1.2 ???
+
+Previously 0.02????

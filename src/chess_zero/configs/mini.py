@@ -5,10 +5,10 @@ version of the agent that is easier and quicker to run locally
 class EvaluateConfig:
     def __init__(self):
         self.vram_frac = 1.0
-        self.game_num = 50
+        self.game_num = 100  #subject to change
         self.replace_rate = 0.55
         self.play_config = PlayConfig()
-        self.play_config.simulation_num_per_move = 200
+        self.play_config.simulation_num_per_move = 100
         self.play_config.thinking_loop = 1
         self.play_config.c_puct = 1 # lower  = prefer mean action value
         self.play_config.tau_decay_rate = 0.6 # I need a better distribution...
@@ -16,13 +16,15 @@ class EvaluateConfig:
         self.evaluate_latest_first = True
         self.max_game_length = 1000
 
+        self.play_config.simulation_num_per_move_t = 100
+
 
 class PlayDataConfig:
     def __init__(self):
         self.min_elo_policy = 500 # 0 weight
         self.max_elo_policy = 1800 # 1 weight
         self.sl_nb_game_in_file = 250
-        self.nb_game_in_file = 50
+        self.nb_game_in_file = 20
         self.max_file_num = 150
 
 
@@ -31,17 +33,22 @@ class PlayConfig:
         self.max_processes = 3
         self.search_threads = 16
         self.vram_frac = 1.0
-        self.simulation_num_per_move = 100
+        self.simulation_num_per_move = 100 #tune this
+        self.simulation_num_per_move_t = 200 #tune this
         self.thinking_loop = 1
         self.logging_thinking = False
         self.c_puct = 1.5
         self.noise_eps = 0.25
         self.dirichlet_alpha = 0.3
-        self.tau_decay_rate = 0.99
-        self.virtual_loss = 3
+        self.tau_decay_rate = 0.99 
+        self.virtual_loss = 3 #tune this       
         self.resign_threshold = -0.8
         self.min_resign_turn = 5
         self.max_game_length = 1000
+
+
+        self.virtual_loss_t = 0.1
+        self.version = 2 #this parameter tests different implementation of virtual loss
 
 
 class TrainerConfig:
@@ -49,8 +56,8 @@ class TrainerConfig:
         self.min_data_size_to_learn = 0
         self.cleaning_processes = 5 # RAM explosion...
         self.vram_frac = 1.0
-        self.batch_size = 384 # tune this to your gpu memory
-        self.epoch_to_checkpoint = 1
+        self.batch_size = 128 # tune this to your gpu memory
+        self.epoch_to_checkpoint = 1 #Maybe a bit more?
         self.dataset_size = 100000
         self.start_total_steps = 0
         self.save_model_steps = 25

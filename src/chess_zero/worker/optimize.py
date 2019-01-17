@@ -8,6 +8,7 @@ from datetime import datetime
 from logging import getLogger
 from time import sleep
 from random import shuffle
+from time import time
 
 import numpy as np
 
@@ -64,13 +65,16 @@ class OptimizeWorker:
         self.filenames = deque(get_game_data_filenames(self.config.resource))
         shuffle(self.filenames)
         total_steps = self.config.trainer.start_total_steps
-
+        start_time = time()
         while True:
             self.fill_queue()
             steps = self.train_epoch(self.config.trainer.epoch_to_checkpoint)
             total_steps += steps
             self.save_current_model()
             a, b, c = self.dataset
+            print(f"time={time() - start_time:5.1f}s ")
+            exit()
+            #train for only one fit
             while len(a) > self.config.trainer.dataset_size/2:
                 a.popleft()
                 b.popleft()
@@ -133,6 +137,10 @@ class OptimizeWorker:
                     filename = self.filenames.popleft()
                     logger.debug(f"loading data from {filename}")
                     futures.append(executor.submit(load_data_from_file,filename))
+            print("size of the data:")
+            print(len(self.dataset[0]))
+            print("size of the limit of size:")
+            print(self.config.trainer.dataset_size)
 
     def collect_all_loaded_data(self):
         """

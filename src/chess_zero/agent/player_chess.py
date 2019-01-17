@@ -53,6 +53,7 @@ class ActionStats:
         self.w = 0
         self.q = 0
         self.p = 0
+        self.v = 0 #this marks the virtual loss for each state
 
 
 class ChessPlayer:
@@ -291,7 +292,7 @@ class ChessPlayer:
             if is_root_node:
                 p_ = (1-e) * p_ + e * noise[i]
                 i += 1
-            b = a_s.q + c_puct * p_ * xx_ / (1 + a_s.n)
+            b = a_s.q + c_puct * p_ * xx_ / (1 + a_s.n) + a_s.v
             if b > best_s:
                 best_s = b
                 best_a = action
@@ -359,6 +360,178 @@ class ChessPlayer:
         """
         for move in self.moves:  # add this game winner result to all past moves.
             move += [z]
+
+    '''*****************************************added test functions*************************************************
+        ************************************************************************************************************
+        ************************************************************************************************************
+    '''
+    def action_modify(self, env, can_stop = True) -> str:
+        """
+        Figures out the next best move
+        within the specified environment and returns a string describing the action to take.
+
+        :param ChessEnv env: environment in which to figure out the action
+        :param boolean can_stop: whether we are allowed to take no action (return None)
+        :return: None if no action should be taken (indicating a resign). Otherwise, returns a string
+            indicating the action to take in uci format
+        """
+        self.reset()
+
+        # for tl in range(self.play_config.thinking_loop):
+        root_value, naked_value = self.search_moves_m(env)
+        policy = self.calc_policy(env)
+        my_action = int(np.random.choice(range(self.labels_n), p = self.apply_temperature(policy, env.num_halfmoves)))
+
+        if can_stop and self.play_config.resign_threshold is not None and \
+                        root_value <= self.play_config.resign_threshold \
+                        and env.num_halfmoves > self.play_config.min_resign_turn:
+            # noinspection PyTypeChecker
+            return None
+        else:
+            self.moves.append([env.observation, list(policy)])
+            return self.config.labels[my_action]
+
+    def search_moves_m(self, env) -> (float, float):
+        """
+        Looks at all the possible moves using the AGZ MCTS algorithm
+         and finds the highest value possible move. Does so using multiple threads to get multiple
+         estimates from the AGZ MCTS algorithm so we can pick the best.
+
+        :param ChessEnv env: env to search for moves within
+        :return (float,float): the maximum value of all values predicted by each thread,
+            and the first value that was predicted.
+        """
+        futures = []
+        with ThreadPoolExecutor(max_workers=self.play_config.search_threads) as executor:
+            for _ in range(self.play_config.simulation_num_per_move_t):
+                futures.append(executor.submit(self.search_my_move_m,env=env.copy(),is_root_node=True,version = self.play_config.version))
+
+        vals = [f.result() for f in futures]
+
+        return np.max(vals), vals[0] # vals[0] is kind of racy
+
+    def search_my_move_m(self, env: ChessEnv, is_root_node=False, version = 0) -> float:
+        """
+        Q, V is value for this Player(always white).
+        P is value for the player of next_player (black or white)
+
+        This method searches for possible moves, adds them to a search tree, and eventually returns the
+        best move that was found during the search.
+
+        :param ChessEnv env: environment in which to search for the move
+        :param boolean is_root_node: whether this is the root node of the search.
+        :return float: value of the move. This is calculated by getting a prediction
+            from the value network.
+        """
+        if env.done:
+            if env.winner == Winner.draw:
+                return 0
+            # assert env.whitewon != env.white_to_move # side to move can't be winner!
+            return -1
+
+        state = state_key(env)
+
+        if(version == 0):
+            with self.node_lock[state]:
+                if state not in self.tree:
+                    leaf_p, leaf_v = self.expand_and_evaluate(env)
+                    self.tree[state].p = leaf_p
+                    return leaf_v # I'm returning everything from the POV of side to move
+
+                # SELECT STEP
+                action_t = self.select_action_q_and_u(env, is_root_node)
+
+                virtual_loss = self.play_config.virtual_loss_t
+
+                my_visit_stats = self.tree[state]
+                my_stats = my_visit_stats.a[action_t]
+
+                my_visit_stats.sum_n += virtual_loss
+                my_stats.n += virtual_loss
+                my_stats.w += -virtual_loss
+                my_stats.q = my_stats.w / my_stats.n
+
+            env.step(action_t.uci())
+            leaf_v = self.search_my_move_m(env, version = 0)  # next move from enemy POV
+            leaf_v = -leaf_v
+
+            # BACKUP STEP
+            # on returning search path
+            # update: N, W, Q
+            with self.node_lock[state]:
+                my_visit_stats.sum_n += -virtual_loss + 1
+                my_stats.n += -virtual_loss + 1
+                my_stats.w += virtual_loss + leaf_v
+                my_stats.q = my_stats.w / my_stats.n
+
+        #testing version 1, using constant virtual loss
+        elif(version == 1):
+            with self.node_lock[state]:
+                if state not in self.tree:
+                    leaf_p, leaf_v = self.expand_and_evaluate(env)
+                    self.tree[state].p = leaf_p
+                    return leaf_v # I'm returning everything from the POV of side to move
+
+                # SELECT STEP
+                action_t = self.select_action_q_and_u(env, is_root_node)
+
+                virtual_loss = self.play_config.virtual_loss_t
+
+                my_visit_stats = self.tree[state]
+                my_stats = my_visit_stats.a[action_t]
+                my_stats.v += -virtual_loss
+
+            env.step(action_t.uci())
+            leaf_v = self.search_my_move_m(env, version = 1)  # next move from enemy POV
+            leaf_v = -leaf_v
+
+            # BACKUP STEP
+            # on returning search path
+            # update: N, W, Q
+            with self.node_lock[state]:
+                my_visit_stats.sum_n += 1
+                my_stats.n += 1
+                my_stats.w += leaf_v
+                my_stats.q = my_stats.w / my_stats.n
+                my_stats.v += virtual_loss
+
+        #testing version 2, using deminishing virtual loss value
+        elif(version == 2):
+            with self.node_lock[state]:
+                if state not in self.tree:
+                    leaf_p, leaf_v = self.expand_and_evaluate(env)
+                    self.tree[state].p = leaf_p
+                    return leaf_v # I'm returning everything from the POV of side to move
+
+                # SELECT STEP
+                action_t = self.select_action_q_and_u(env, is_root_node)
+
+                
+
+                my_visit_stats = self.tree[state]
+                my_stats = my_visit_stats.a[action_t]
+
+                virtual_loss = self.play_config.virtual_loss_t / (my_stats.n*my_stats.n+1)
+
+                my_stats.v += -virtual_loss
+
+            env.step(action_t.uci())
+            leaf_v = self.search_my_move_m(env, version = 2)  # next move from enemy POV
+            leaf_v = -leaf_v
+
+            # BACKUP STEP
+            # on returning search path
+            # update: N, W, Q
+            with self.node_lock[state]:
+                my_visit_stats.sum_n += 1
+                my_stats.n += 1
+                my_stats.w += leaf_v
+                my_stats.q = my_stats.w / my_stats.n
+                my_stats.v += virtual_loss
+
+        else:
+            print("something is wrong!")
+        return leaf_v
 
 
 def state_key(env: ChessEnv) -> str:

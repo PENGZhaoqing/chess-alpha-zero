@@ -7,6 +7,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from logging import getLogger
 from multiprocessing import Manager
 from time import sleep
+from time import time
 
 from chess_zero.agent.model_chess import ChessModel
 from chess_zero.agent.player_chess import ChessPlayer
@@ -48,15 +49,21 @@ class EvaluateWorker:
         Start evaluation, endlessly loading the latest models from the directory which stores them and
         checking if they do better than the current model, saving the result in self.current_model
         """
+        start_time = time()
         while True:
             ng_model, model_dir = self.load_next_generation_model()
+
+            ng_model = self.load_current_model()
+
             logger.debug(f"start evaluate model {model_dir}")
             ng_is_great = self.evaluate_model(ng_model)
             if ng_is_great:
                 logger.debug(f"New Model become best model: {model_dir}")
-                save_as_best_model(ng_model)
-                self.current_model = ng_model
-            self.move_model(model_dir)
+            print(f"time={time() - start_time:5.1f}s ")
+            exit()
+            #     save_as_best_model(ng_model)
+            #     self.current_model = ng_model
+            # self.move_model(model_dir)
 
     def evaluate_model(self, ng_model):
         """
@@ -74,28 +81,33 @@ class EvaluateWorker:
                 futures.append(fut)
 
             results = []
+            f_total = 0.0
+            f_total_step = 0.0
             for fut in as_completed(futures):
                 # ng_score := if ng_model win -> 1, lose -> 0, draw -> 0.5
-                ng_score, env, current_white = fut.result()
+                ng_score, env, current_white,total,total_step = fut.result()
                 results.append(ng_score)
+                f_total+=total
+                f_total_step+=total_step
                 win_rate = sum(results) / len(results)
                 game_idx = len(results)
                 logger.debug(f"game {game_idx:3}: ng_score={ng_score:.1f} as {'black' if current_white else 'white'} "
                              f"{'by resign ' if env.resigned else '          '}"
                              f"win_rate={win_rate*100:5.1f}% "
-                             f"{env.board.fen().split(' ')[0]}")
+                             f"{env.board.fen().split(' ')[0]}"
+                             f"time={f_total:5.1f}s total step = {f_total_step} average = {f_total/f_total_step:5.3f}")
 
                 colors = ("current_model", "ng_model")
                 if not current_white:
                     colors = reversed(colors)
                 pretty_print(env, colors)
 
-                if len(results)-sum(results) >= self.config.eval.game_num * (1-self.config.eval.replace_rate):
-                    logger.debug(f"lose count reach {results.count(0)} so give up challenge")
-                    return False
-                if sum(results) >= self.config.eval.game_num * self.config.eval.replace_rate:
-                    logger.debug(f"win count reach {results.count(1)} so change best model")
-                    return True
+                # if len(results)-sum(results) >= self.config.eval.game_num * (1-self.config.eval.replace_rate):
+                #     logger.debug(f"lose count reach {results.count(0)} so give up challenge")
+                #     return False
+                # if sum(results) >= self.config.eval.game_num * self.config.eval.replace_rate:
+                #     logger.debug(f"win count reach {results.count(1)} so change best model")
+                #     return True
 
         win_rate = sum(results) / len(results)
         logger.debug(f"winning rate {win_rate*100:.1f}%")
@@ -163,14 +175,34 @@ def play_game(config, cur, ng, current_white: bool) -> (float, ChessEnv, bool):
     else:
         white, black = ng_player, current_player
 
+    start_time = time()
+    total = 0.0
+    total_step = 0.0
+    
     while not env.done:
         if env.white_to_move:
-            action = white.action(env)
+            if(current_white):
+                action = white.action(env)
+            else:
+                start_time = time()
+                action = white.action_modify(env)
+                total+=time() - start_time
+                total_step+=1
         else:
-            action = black.action(env)
+            if(current_white):
+                start_time = time()
+                action = black.action_modify(env)
+                total+=time() - start_time
+                total_step+=1
+            else:
+                action = black.action(env)
+
         env.step(action)
         if env.num_halfmoves >= config.eval.max_game_length:
             env.adjudicate()
+
+    #print(f"time={total:5.1f}s total step = {total_step} average = {total/total_step:5.1f}")
+    #exit()
 
     if env.winner == Winner.draw:
         ng_score = 0.5
@@ -180,4 +212,4 @@ def play_game(config, cur, ng, current_white: bool) -> (float, ChessEnv, bool):
         ng_score = 1
     cur.append(cur_pipes)
     ng.append(ng_pipes)
-    return ng_score, env, current_white
+    return ng_score, env, current_white, total, total_step
